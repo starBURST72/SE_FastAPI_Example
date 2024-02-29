@@ -1,26 +1,34 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from transformers import pipeline
 from pydantic import BaseModel
-
+import asyncio
 
 class Item(BaseModel):
     text: str
 
-
 app = FastAPI()
-classifier = pipeline("sentiment-analysis")
 
+async def get_classifier():
+    return await asyncio.get_event_loop().run_in_executor(None, pipeline, "sentiment-analysis")
+
+@app.on_event("startup")
+async def on_startup():
+    app.classifier = await get_classifier()
 
 @app.get("/")
-def root():
+async def root():
     return {"FastApi service started!"}
 
-
 @app.get("/{text}")
-def get_params(text: str):
-    return classifier(text)
-
+async def get_params(text: str):
+    try:
+        return await app.classifier(text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to classify text")
 
 @app.post("/predict/")
-def predict(item: Item):
-    return classifier(item.text)
+async def predict(item: Item):
+    try:
+        return await app.classifier(item.text)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to classify text")
